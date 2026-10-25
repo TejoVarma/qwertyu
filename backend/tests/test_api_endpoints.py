@@ -4,8 +4,8 @@ from httpx import AsyncClient
 
 @pytest.mark.asyncio
 async def test_health_endpoint(client: AsyncClient):
-    """Verifies that the /api/v1/health endpoint confirms database connectivity."""
-    response = await client.get("/api/v1/health")
+    """Verifies that the /health endpoint confirms database connectivity."""
+    response = await client.get("/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
@@ -18,7 +18,7 @@ async def test_health_endpoint(client: AsyncClient):
 async def test_day_ahead_decision_endpoint(client: AsyncClient):
     """Verifies that the /decision/day-ahead endpoint returns all 48 settlement periods."""
     response = await client.get(
-        "/api/v1/decision/day-ahead",
+        "/decision/day-ahead",
         params={"delivery_date": "2026-01-15", "cutoff_hour": 11},
     )
     assert response.status_code == 200
@@ -34,7 +34,7 @@ async def test_day_ahead_decision_endpoint(client: AsyncClient):
 async def test_monthly_evaluation_endpoint(client: AsyncClient):
     """Verifies that the /evaluation/monthly endpoint computes full January 2026 statistics."""
     response = await client.get(
-        "/api/v1/evaluation/monthly",
+        "/evaluation/monthly",
         params={"start_date": "2026-01-01", "end_date": "2026-01-31", "cutoff_hour": 11},
     )
     assert response.status_code == 200
@@ -56,7 +56,7 @@ async def test_procurement_advisor_endpoint(client: AsyncClient):
         "risk_tolerance": 1.0,
         "peak_demand_mw": 38000.0,
     }
-    response = await client.post("/api/v1/procurement/advisor", json=payload)
+    response = await client.post("/procurement/advisor", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["delivery_date"] == "2026-01-15"

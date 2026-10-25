@@ -304,9 +304,7 @@ npm run build
 ### 2. Frontend: Vercel Deployment
 1. Import the repository into [Vercel](https://vercel.com).
 2. Set **Root Directory** to `frontend`.
-3. Add environment variable:
-   `VITE_API_URL=https://your-backend-api.onrender.com/api/v1`
-4. Deploy! The included `frontend/vercel.json` automatically manages client-side SPA routing.
+3. Deploy! The included `frontend/vercel.json` automatically manages client-side SPA routing and proxies `/api/*` requests to the Render backend.
 
 ---
 
@@ -316,10 +314,10 @@ When the backend is running, explore the interactive OpenAPI documentation at `h
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/v1/health` | Service health, version, and database connectivity check. |
-| `GET` | `/api/v1/decision/day-ahead` | Strict As-Of Day-Ahead forecast vs actuals for all 48 settlement periods. |
-| `GET` | `/api/v1/evaluation/monthly` | January 2026 monthly roll-up: MAE, RMSE, Mean Bias, nMAE %, and diurnal stats. |
-| `GET` | `/api/v1/procurement/advisor` | Interactive thermal procurement schedule with P90 downside risk safety buffer. |
+| `GET` | `/health` | Service health, version, and database connectivity check. |
+| `GET` | `/decision/day-ahead` | Strict As-Of Day-Ahead forecast vs actuals for all 48 settlement periods. |
+| `GET` | `/evaluation/monthly` | January 2026 monthly roll-up: MAE, RMSE, Mean Bias, nMAE %, and diurnal stats. |
+| `POST` | `/procurement/advisor` | Interactive thermal procurement schedule with P90 downside risk safety buffer. |
 
 ---
 

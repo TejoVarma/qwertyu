@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     """
     PROJECT_NAME: str = "UK Day-Ahead Wind Procurement Decision Platform"
     VERSION: str = "1.0.0"
-    API_V1_STR: str = "/api/v1"
     ENVIRONMENT: str = "development"
     PORT: int = 8000
     
