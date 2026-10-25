@@ -74,6 +74,16 @@ class Settings(BaseSettings):
         # Convert standard postgresql:// to postgresql+asyncpg://
         elif v.startswith("postgresql://") and not v.startswith("postgresql+asyncpg://"):
             v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # Normalize Neon/libpq query parameters for asyncpg compatibility
+        if "sslmode=require" in v:
+            v = v.replace("sslmode=require", "ssl=require")
+        if "&channel_binding=require" in v:
+            v = v.replace("&channel_binding=require", "")
+        if "?channel_binding=require&" in v:
+            v = v.replace("?channel_binding=require&", "?")
+        if "?channel_binding=require" in v:
+            v = v.replace("?channel_binding=require", "")
             
         return v
 
