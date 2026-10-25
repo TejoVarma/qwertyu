@@ -100,6 +100,17 @@ class ProcurementAdvisorRequest(BaseModel):
     peak_demand_mw: float = Field(default=38000.0, gt=0.0, description="Peak evening consumer demand in MW")
     custom_demand: list[float] | None = Field(default=None, description="Optional 48-point custom consumer demand curve")
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "delivery_date": "2026-01-15",
+                "cutoff_hour": 11,
+                "risk_tolerance": 1.0,
+                "peak_demand_mw": 38000.0,
+            }
+        }
+    }
+
 
 class ProcurementAdvisorResponse(BaseModel):
     delivery_date: date
