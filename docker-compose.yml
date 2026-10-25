@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: wind_procure_iq_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-energy_trader}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-energy_secure_pwd_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-wind_procure_iq}
+    ports:
+      - "5433:5432" # Mapped to 5433 to avoid port conflict with local macOS Postgres on 5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-energy_trader} -d ${POSTGRES_DB:-wind_procure_iq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wind_procure_iq_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy_trader}:${POSTGRES_PASSWORD:-energy_secure_pwd_2026}@postgres:5432/${POSTGRES_DB:-wind_procure_iq}
+      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+      DEFAULT_DECISION_CUTOFF_HOUR: 11
+      ENVIRONMENT: production
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
