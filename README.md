@@ -1,346 +1,213 @@
-# WindProcure IQ — UK Day-Ahead Wind Forecast Evaluation & Thermal Procurement Platform
+# WindProcure IQ: UK Day-Ahead Wind Forecast Decision Support
 
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI%200.110-009688.svg?style=flat&logo=fastapi)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/Frontend-React%2018%20%2B%20TypeScript-61DAFB.svg?style=flat&logo=react)](https://react.dev)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2017-336791.svg?style=flat&logo=postgresql)](https://www.postgresql.org)
-[![Docker](https://img.shields.io/badge/Deployment-Docker%20%26%20Compose-2496ED.svg?style=flat&logo=docker)](https://www.docker.com)
-[![Pytest](https://img.shields.io/badge/Tests-8%20Passed%20(0.2s)-449C44.svg?style=flat&logo=pytest)](https://docs.pytest.org)
-[![Vercel](https://img.shields.io/badge/Cloud%20Frontend-Vercel%20Ready-000000.svg?style=flat&logo=vercel)](https://vercel.com)
-[![Neon](https://img.shields.io/badge/Cloud%20Database-Neon%20Serverless-00E599.svg?style=flat)](https://neon.tech)
+A web app for a UK utility's day-ahead power buying team. It answers two questions:
 
-**WindProcure IQ** is an enterprise-grade decision-support and forecast accuracy evaluation platform engineered for UK wholesale electricity utilities operating in the **Day-Ahead Market (EPEX SPOT GB / Nord Pool)**.
+1. **What was the latest wind forecast available when we had to bid?** For any delivery day, the app shows the national wind generation forecast exactly as it stood at the decision cutoff on the day before, next to what was actually generated.
+2. **How much can we trust that forecast?** It quantifies forecast error (MAE, RMSE, bias, P90 shortfall) by day, by time of day and by forecast horizon, so procurement decisions can account for a measured error.
 
-The platform consumes real-time, high-frequency stream datasets from **Elexon BMRS** (`FUELHH` metered wind generation and `WINDFOR` forecast updates), enforces strict **Point-in-Time temporal validity (Zero Look-Ahead Bias)** at Day-Ahead Gate Closure (**11:00 UTC on $D-1$**), quantifies forecast error distributions across all 48 half-hour Settlement Periods, and optimizes thermal generation procurement (CCGT) by hedging empirical **P90 wind shortfall risks**.
+Data: Elexon BMRS only, national level: `FUELHH` (fuelType `WIND`) for actuals and `WINDFOR` for forecasts. Scope: purchase decisions made in January 2026, which means delivery days **2 January to 1 February 2026**.
 
----
-
-## 1. Video Presentation (10-Minute Walkthrough)
-
-The 10-minute demonstration covers both the commercial trading operations and technical architecture:
-- **Part 1 (0:00 – 5:00)**: Client Pitch to Utility Trading Desk Lead *(GB electricity economics, cash-out penalty avoidance, point-in-time decision cockpit, and thermal buffer planning)*.
-- **Part 2 (5:00 – 10:00)**: Technical Lead Architecture Review *(sub-2ms PostgreSQL As-Of joins, NumPy vectorization, test coverage with real Elexon data, Dockerization, and cloud deployment)*.
-
-> **YouTube Video Link**: `https://youtu.be/PLACEHOLDER_UNLISTED_LINK` *(Insert your unlisted YouTube URL here)*  
-> Detailed spoken script and presentation slides: [Lesson 7: Video Presentation Guide](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/07-10-minute-video-scripts.md)
+| | |
+| :--- | :--- |
+| **Live app** | _VERCEL_URL_ |
+| **API docs (Swagger)** | https://windprocure-api.onrender.com/docs |
+| **Video walkthrough** | _VIDEO_URL_ |
 
 ---
 
-## 2. The UK Day-Ahead Market Problem
+## 1. Key findings for January 2026 decisions
 
-In Great Britain, electricity supply and demand must match continuously at **50 Hz**. Imbalances are settled post-delivery in the **Balancing Mechanism (BM)** via cash-out prices (**System Buy Price / System Sell Price**). If a utility under-contracts wind generation and a shortfall occurs, it pays severe cash-out penalties (often exceeding **£150 to £300/MWh**).
+Based on the latest forecast published at or before **11:00 UTC on D-1** (1,488 half-hours):
 
-```
-   D-1 Morning                 11:00 UTC (D-1)                     Day D (00:00 - 24:00 UTC)
-─────────┼────────────────────────────▲───────────────────────────────────────┼─────────►
-   WINDFOR Forecasts          Day-Ahead Gate Closure                 Physical Delivery
-   Streamed Continuously      ★ ZERO LOOK-AHEAD CUTOFF ★             48 Settlement Periods (SPs 1-48)
-                              Only forecasts published               Actual Wind Metered (FUELHH)
-                              PRIOR to 11:00 UTC valid!
-```
+| Metric | Value |
+| :--- | :--- |
+| MAE | 2,016 MW (17.9% of mean metered wind output) |
+| RMSE | 2,510 MW |
+| Mean bias (forecast − actual) | **+1,730 MW**: forecast was above actual in 84% of half-hours |
+| P90 / P95 shortfall | 4,172 MW / 5,347 MW |
 
-### Key Operational Challenges Addressed:
-1. **Look-Ahead Bias Elimination**: Historical backtests often accidentally use forecasts published *after* the auction cleared. WindProcure IQ guarantees that for physical delivery on Day $D$, only forecasts published on or before **11:00 UTC on $D-1$** are considered.
-2. **Data Granularity Harmonization**: Elexon actuals (`FUELHH`) arrive at half-hour resolution (SPs 1–48), while Elexon forecasts (`WINDFOR`) arrive at hourly resolution. The platform maps and expands hourly forecasts across both half-hours ($2k-1$ and $2k$) without dropping records.
-3. **Thermal Procurement Optimization**: Tells traders exactly how much CCGT generation to procure, balancing baseline Net Demand against an empirical **P90 Downside Risk Buffer**.
+Error grows with forecast horizon, which is the accuracy given up by committing a day ahead:
 
----
+| Horizon (forecast issued at least h hours before delivery) | 1h | 12h | 24h | 36h | 48h |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| MAE (MW) | 1,694 | 1,804 | 1,945 | 2,154 | 2,316 |
+| P90 absolute error (MW) | 3,439 | 3,649 | 3,812 | 4,139 | 4,752 |
 
-## 3. High-Level Architecture
-
-```
-┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                                  WINDPROCURE IQ PLATFORM                               │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-
-    ┌────────────────────────┐                   ┌──────────────────────────────┐
-    │      Elexon BMRS       │                   │    Trading Desk Browser      │
-    │  API / Live Streams    │                   │   (Chrome / Edge / Safari)   │
-    └───────────┬────────────┘                   └──────────────▲───────────────┘
-                │ HTTP Stream                                   │ HTTP / JSON
-                ▼                                               ▼
-    ┌────────────────────────┐                   ┌──────────────────────────────┐
-    │  Elexon Ingestion CLI  │                   │      React 18 Frontend       │
-    │  (scripts/ingest.py)   │                   │ (TypeScript, Zustand, Vite)  │
-    └───────────┬────────────┘                   └──────────────▲───────────────┘
-                │ Async Upsert                                  │ Reverse Proxy
-                ▼                                               ▼
-    ┌────────────────────────┐  Sub-2ms As-Of    ┌──────────────────────────────┐
-    │  PostgreSQL 17 Database│◄─────────────────►│     FastAPI Async Backend    │
-    │  - wind_actuals        │    DISTINCT ON    │ - AsOfEngine                 │
-    │  - wind_forecasts      │    Index Scan     │ - MetricsCalculator (NumPy)  │
-    └────────────────────────┘                   │ - ProcurementAdvisor         │
-                                                 └──────────────────────────────┘
-```
-
-### Technology Stack:
-| Layer | Technologies | Rationale |
-| :--- | :--- | :--- |
-| **Frontend** | React 18, TypeScript, Tailwind CSS, Zustand, Recharts, Lucide | High-performance 48-period time-series rendering, zero-prop-drilling state management, clean trader UX. |
-| **Backend** | Python 3.13, FastAPI, Pydantic v2, Async SQLAlchemy 2.0, asyncpg | Non-blocking asynchronous I/O, sub-2ms query execution, auto-generated OpenAPI documentation. |
-| **Data Engine** | NumPy 1.26, Pandas 2.2 | Vectorized mathematical metrics (MAE, RMSE, Mean Bias, empirical quantiles). |
-| **Database** | PostgreSQL 17 (Local Beekeeper Studio + Neon Serverless) | UUID primary keys, composite B-tree temporal indices `(start_time, publish_time DESC)`. |
-| **DevOps** | Docker, Docker Compose, Nginx, Vercel | Lean multi-stage images (<180 MB), non-root container security, instant cloud deployment. |
+The persistent over-forecast matters most for the desk: on average, roughly 1.7 GW less wind arrived than the day-ahead forecast promised, which is volume that has to be covered elsewhere. A likely contributor is that `FUELHH` reports metered output after any curtailment, while `WINDFOR` forecasts generation potential. This is worth confirming with the client before applying a bias correction.
 
 ---
 
-## 4. Key Quantitative Metrics & Business Formulations
+## 2. Definitions and assumptions
 
-All mathematical computations are verified via Pytest:
-
-| Metric | Mathematical Formula | Trader Interpretation |
-| :--- | :--- | :--- |
-| **MAE** | $\frac{1}{N}\sum_{i=1}^{N} \vert \hat{Y}_i - Y_i \vert$ | Average volumetric forecasting error in MW. |
-| **RMSE** | $\sqrt{\frac{1}{N}\sum_{i=1}^{N} (\hat{Y}_i - Y_i)^2}$ | Penalizes large outlier forecast errors that threaten grid frequency stability. $(\text{RMSE} \ge \text{MAE})$. |
-| **Mean Bias** | $\frac{1}{N}\sum_{i=1}^{N} (\hat{Y}_i - Y_i)$ | **Positive**: Systematic over-forecasting (Shortfall risk).<br>**Negative**: Systematic under-forecasting (Spill/Surplus). |
-| **P90 Downside Risk** | $90^{\text{th}}\text{ percentile of } \max(0, \hat{Y}_i - Y_i)$ | Empirical safety buffer covering 90% of wind drop events without market exposure. |
-| **Recommended Thermal** | $\text{Net Demand}_i + \alpha \times \text{Buffer}_i$ | Total megawatt thermal dispatch target submitted to wholesale auctions. |
+| Topic | Choice |
+| :--- | :--- |
+| Decision cutoff | D-1 at 11:00 UTC by default; selectable in the UI and via `cutoff_hour`. In January, UK local time equals UTC. |
+| Forecast used | For each delivery half-hour, the latest `WINDFOR` forecast with `publishTime <= cutoff`. Later forecasts are never used. |
+| Resolution | `FUELHH` is half-hourly and `WINDFOR` is hourly. Each hourly forecast value is also applied to the following half-hour (a step hold), so every metered half-hour is compared. |
+| Error sign | `error = forecast − actual`. Positive means wind delivered less than forecast (a shortfall). |
+| Relative MAE | MAE divided by mean metered wind output over the same periods (data-derived, not an assumed capacity). |
+| Horizon analysis | For horizon h, the latest forecast published at least h hours before each delivery half-hour. |
+| Procurement what-if | Illustrative only. Demand is a user input (not Elexon data). The safety buffer for each settlement period is α × P90 of shortfalls on the 14 fully settled days ending at D-2. Nothing from D-1 or D itself is used. |
 
 ---
 
-## 5. Directory Structure
+## 3. Architecture
 
 ```
-uk-energy-dayahead-iq/
-├── docker-compose.yml             # Single-command orchestration (Postgres, Backend, Frontend)
-├── README.md                      # Production documentation
-│
+Elexon BMRS (FUELHH, WINDFOR)
+        │  scripts/ingest_data.py   (real data only; fails loudly on any API error)
+        ▼
+PostgreSQL ── wind_actuals    (start_time unique)
+           └─ wind_forecasts  (unique start_time + publish_time, index for point-in-time lookups)
+        │  point-in-time SQL (DISTINCT ON … ORDER BY publish_time DESC)
+        ▼
+FastAPI ── /decision  /evaluation  /procurement  /health
+        │  JSON
+        ▼
+React + TypeScript (Vite, Zustand, Recharts, Tailwind)
+```
+
+- **Ingestion** is a separate CLI step, so the API never calls Elexon on a user request. Loads are idempotent (`ON CONFLICT DO NOTHING`), and `--reset` reloads from scratch.
+- **Point-in-time join**: one SQL query derives each row's cutoff (`D-1 + cutoff_hour`) from the delivery timestamp, so the same query serves a single day or the whole month.
+- **Metrics** are computed in Python (NumPy) in `MetricsCalculator`, which keeps them unit-testable and independent of the database.
+
+### Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| Frontend | React 18, TypeScript, Vite, Zustand, Recharts, Tailwind CSS, Vitest + React Testing Library |
+| Backend | Python, FastAPI, Pydantic v2, async SQLAlchemy 2 + asyncpg, NumPy, httpx, Pytest |
+| Database | PostgreSQL 17 (Docker locally, Neon in the cloud) |
+| DevOps | Docker, Docker Compose, Vercel (frontend), Render (backend Docker image) |
+
+---
+
+## 4. Directory structure
+
+```
+.
+├── docker-compose.yml          # PostgreSQL + FastAPI backend
+├── README.md
 ├── backend/
-│   ├── Dockerfile                 # Multi-stage Python 3.13 slim build (non-root trader user)
-│   ├── requirements.txt           # Production dependencies
-│   ├── pytest.ini                 # Pytest asyncio configuration
+│   ├── Dockerfile              # Multi-stage Python image, runs as non-root user
+│   ├── requirements.txt
+│   ├── pytest.ini
+│   ├── .env.example            # Environment variables template
 │   ├── app/
-│   │   ├── main.py                # FastAPI entry point with CORS and lifespan init
+│   │   ├── main.py             # FastAPI app, CORS, startup table creation
 │   │   ├── core/
-│   │   │   ├── config.py          # Pydantic Settings & async database URL normalization
-│   │   │   └── database.py        # Async SQLAlchemy engine & session factory
+│   │   │   ├── config.py       # Settings (DB URL, cutoff hour, evaluation window, horizons)
+│   │   │   └── database.py     # Async engine and session dependency
 │   │   ├── models/
-│   │   │   ├── actual.py          # WindActual ORM model (FUELHH)
-│   │   │   ├── forecast.py        # WindForecast ORM model (WINDFOR with composite index)
-│   │   │   └── schemas.py         # Pydantic v2 API request/response schemas
+│   │   │   ├── actual.py       # wind_actuals table (FUELHH WIND)
+│   │   │   ├── forecast.py     # wind_forecasts table (WINDFOR)
+│   │   │   └── schemas.py      # Pydantic request/response models
 │   │   ├── services/
-│   │   │   ├── as_of_engine.py    # Sub-2ms Point-in-Time PostgreSQL join engine
-│   │   │   ├── metrics_calculator.py # Vectorized NumPy error metrics & diurnal profiles
-│   │   │   ├── procurement_advisor.py# UK consumer load curve & thermal hedge calculator
-│   │   │   └── elexon_service.py  # Elexon BMRS stream consumer & hourly expansion
+│   │   │   ├── elexon_service.py      # Elexon BMRS client
+│   │   │   ├── as_of_engine.py        # Point-in-time and horizon SQL
+│   │   │   ├── metrics_calculator.py  # MAE, RMSE, bias, percentiles, diurnal/daily/horizon roll-ups
+│   │   │   └── procurement_advisor.py # Illustrative thermal requirement with historical buffer
 │   │   └── api/v1/
-│   │       ├── router.py          # API v1 route aggregator
-│   │       └── endpoints/
-│   │           ├── health.py      # Health & DB connectivity check
-│   │           ├── decision.py    # 48-period Day-Ahead decision view endpoint
-│   │           ├── evaluation.py  # January 2026 monthly aggregation & diurnal stats
-│   │           └── procurement.py # Interactive thermal procurement advisor endpoint
+│   │       ├── router.py
+│   │       └── endpoints/      # health.py, decision.py, evaluation.py, procurement.py
 │   ├── scripts/
-│   │   └── ingest_data.py         # Batch ingestion CLI with ON CONFLICT DO NOTHING
+│   │   ├── ingest_data.py      # Loads Elexon data into PostgreSQL
+│   │   └── init_db.py          # Creates tables
 │   └── tests/
-│       ├── conftest.py            # Async test fixtures
-│       ├── test_services.py       # Mathematical precision unit tests
-│       └── test_api_endpoints.py  # Integration tests against live January 2026 Elexon data
-│
+│       ├── conftest.py         # Test client on a dedicated, seeded test database
+│       ├── seed.py             # Small hand-checkable dataset
+│       ├── test_api_endpoints.py
+│       ├── test_elexon_service.py  # Elexon client against mocked HTTP responses
+│       └── test_services.py
 └── frontend/
-    ├── Dockerfile                 # Multi-stage Node.js build served via Alpine Nginx
-    ├── nginx.conf                 # Nginx reverse proxy routing /api/ to backend
-    ├── vercel.json                # Vercel SPA client-side rewrite configuration
-    ├── package.json
-    ├── src/
-    │   ├── App.tsx                # Main trader cockpit container
-    │   ├── main.tsx
-    │   ├── types/index.ts         # TypeScript interfaces matching backend Pydantic schemas
-    │   ├── store/useTraderStore.ts# Centralized Zustand reactive store
-    │   ├── services/api.ts        # Axios/Fetch API client
-    │   └── components/
-    │       ├── Navbar.tsx         # System status, Gate Closure clock, navigation tabs
-    │       ├── KpiCards.tsx       # Live metrics cards (MAE, RMSE, Bias, Peak Wind, Actual)
-    │       ├── SettlementChart.tsx# 48 Settlement Periods dual-axis Recharts curve
-    │       ├── ProcurementTab.tsx # Interactive Thermal Procurement Advisor & Dispatch Table
-    │       └── AccuracyLab.tsx    # January 2026 monthly overview & diurnal bias chart
+    ├── vercel.json             # SPA rewrites + /api proxy to the backend
+    ├── vite.config.ts          # Dev server proxies /api to localhost:8000
+    └── src/
+        ├── App.tsx
+        ├── components/         # Navbar, KpiCards, SettlementChart, AccuracyLab, ProcurementTab
+        ├── store/useTraderStore.ts
+        ├── services/api.ts
+        ├── types/index.ts
+        └── test/               # Vitest + React Testing Library
 ```
 
 ---
 
-## 6. Quickstart Guide
+## 5. Running locally
 
-### Option A: Run Backend & Database with Docker Compose
-
-Spin up the containerized database and FastAPI backend:
+Prerequisites: Docker and Node.js 18+.
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/uk-energy-dayahead-iq.git
-cd uk-energy-dayahead-iq
-
-# Build and start PostgreSQL + FastAPI Backend
+# 1. Start PostgreSQL and the FastAPI backend
 docker compose up --build -d
-```
 
-The services will become available at:
-- **FastAPI Interactive Docs**: `http://localhost:8000/docs`
-- **PostgreSQL Database**: `localhost:5433` (accessible via Beekeeper Studio, user `energy_trader`, password `energy_secure_pwd_2026`)
+# 2. Load Elexon data (about 15 seconds; no API key needed)
+docker compose exec backend python scripts/ingest_data.py --reset
 
-To populate the database with January 2026 Elexon data:
-```bash
-docker compose exec backend python scripts/ingest_data.py
-```
-
-Then start the React frontend:
-```bash
+# 3. Start the frontend
 cd frontend
 npm install
 npm run dev
 ```
-Open `http://localhost:5173` to access the live trading cockpit.
+
+- App: http://localhost:5173
+- API docs: http://localhost:8000/docs
+
+To run the backend without Docker, create `backend/.env` from `.env.example`, then run `pip install -r requirements.txt`, `python scripts/ingest_data.py --reset` and `uvicorn app.main:app --reload`.
 
 ---
 
-### Option B: Local Developer Setup
+## 6. Tests
 
-#### 1. Database Setup (Localhost PostgreSQL)
-Ensure PostgreSQL 17 is running locally on port 5432 and create the database:
-```sql
-CREATE DATABASE wind_procure_iq;
-```
-
-#### 2. Backend Setup
 ```bash
-cd backend
+# Backend: unit tests + API tests on a seeded test database
+# (uses the docker-compose Postgres on localhost:5433 and creates `wind_procure_iq_test`;
+#  override with TEST_DATABASE_URL)
+cd backend && pytest -q
 
-# Create virtual environment and activate
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment variables (or copy .env.example)
-export DATABASE_URL="postgresql+asyncpg://YOUR_USER@localhost:5432/wind_procure_iq"
-
-# Ingest January 2026 Elexon data
-python scripts/ingest_data.py
-
-# Run FastAPI backend server
-uvicorn app.main:app --reload --port 8000
+# Frontend
+cd frontend && npm test
 ```
 
-#### 3. Frontend Setup
-```bash
-cd frontend
-
-# Install Node modules
-npm install
-
-# Start Vite development server
-npm run dev
-```
-Open `http://localhost:5173` to access the live trading cockpit.
+The API tests seed a small dataset with a forecast published **after** the cutoff and check that it is never used. They also check that the procurement buffer ignores D-1 and D.
 
 ---
 
-## 7. Running Tests
+## 7. Deployment
 
-The test suite includes both mathematical unit tests and full database integration tests querying real Elexon January 2026 records:
-
-```bash
-cd backend
-source .venv/bin/activate
-pytest tests/ -v
-```
-
-### Backend Test Verification (Pytest):
-```bash
-cd backend
-source .venv/bin/activate
-pytest tests/ -v
-```
-```
-tests/test_api_endpoints.py::test_health_endpoint PASSED                 [ 12%]
-tests/test_api_endpoints.py::test_day_ahead_decision_endpoint PASSED     [ 25%]
-tests/test_api_endpoints.py::test_monthly_evaluation_endpoint PASSED     [ 37%]
-tests/test_api_endpoints.py::test_procurement_advisor_endpoint PASSED    [ 50%]
-tests/test_services.py::test_settlement_period_calculation PASSED        [ 62%]
-tests/test_services.py::test_as_of_cutoff_calculation PASSED             [ 75%]
-tests/test_services.py::test_metrics_calculator_mathematical_precision PASSED [ 87%]
-tests/test_services.py::test_procurement_advisor_hedging_logic PASSED    [100%]
-
-============================== 8 passed in 0.22s ===============================
-```
-
-### Frontend Test Verification (Vitest & RTL):
-```bash
-cd frontend
-npm test
-```
-```
- ✓ src/test/useTraderStore.test.ts (6 tests)
- ✓ src/test/KpiCards.test.tsx (2 tests)
- ✓ src/test/Navbar.test.tsx (3 tests)
- ✓ src/test/ProcurementTab.test.tsx (2 tests)
-
- Test Files  4 passed (4)
-      Tests  13 passed (13)
-   Duration  815ms
-```
-
-To test TypeScript compilation and the frontend production build:
-```bash
-cd frontend
-npm run build
-```
-*(Compiles cleanly with zero errors in ~1.64s).*
+- **Database**: Neon PostgreSQL, loaded with `DATABASE_URL=... python scripts/ingest_data.py --reset`.
+- **Backend**: the `backend/Dockerfile` image on Render. A long-running FastAPI service with a connection pool fits a container host better than serverless functions, and Heroku no longer has a free tier.
+- **Frontend**: Vercel, root directory `frontend`. `vercel.json` proxies `/api/*` to the backend, so the browser only talks to one origin.
 
 ---
 
-## 8. Multi-Environment Cloud Deployment
-
-### 1. Database: Neon Serverless PostgreSQL
-1. Create a project at [Neon](https://neon.tech) in region `eu-west-2` (London).
-2. Obtain your pooled connection string:
-   ```
-   DATABASE_URL=postgresql+asyncpg://user:password@ep-cold-wind.eu-west-2.aws.neon.tech/wind_procure_iq?ssl=require
-   ```
-3. Run the ingestion CLI against Neon:
-   ```bash
-   DATABASE_URL="postgresql+asyncpg://..." python scripts/ingest_data.py
-   ```
-
-### 2. Frontend: Vercel Deployment
-1. Import the repository into [Vercel](https://vercel.com).
-2. Set **Root Directory** to `frontend`.
-3. Deploy! The included `frontend/vercel.json` automatically manages client-side SPA routing and proxies `/api/*` requests to the Render backend.
-
----
-
-## 9. API Reference (FastAPI Swagger)
-
-When the backend is running, explore the interactive OpenAPI documentation at `http://localhost:8000/docs`:
+## 8. API reference
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/health` | Service health, version, and database connectivity check. |
-| `GET` | `/decision/day-ahead` | Strict As-Of Day-Ahead forecast vs actuals for all 48 settlement periods. |
-| `GET` | `/evaluation/monthly` | January 2026 monthly roll-up: MAE, RMSE, Mean Bias, nMAE %, and diurnal stats. |
-| `POST` | `/procurement/advisor` | Interactive thermal procurement schedule with P90 downside risk safety buffer. |
+| `GET` | `/health` | Service status, database connectivity and row counts. |
+| `GET` | `/decision/day-ahead?delivery_date=&cutoff_hour=` | 48 half-hours of the forecast as of the cutoff vs actuals, with day KPIs. |
+| `GET` | `/evaluation/monthly?start_date=&end_date=&cutoff_hour=` | Window metrics, profile by settlement period and daily roll-up. Defaults to 2 Jan to 1 Feb 2026. |
+| `GET` | `/evaluation/daily-log` | Daily roll-up only. |
+| `GET` | `/evaluation/horizon?start_date=&end_date=` | Error statistics by forecast horizon (1 to 48 hours). |
+| `POST` | `/procurement/advisor` | Illustrative thermal requirement with a historical P90 buffer. |
 
 ---
 
-## 10. Educational Syllabus & Learning Guides
+## 9. Update after submission
 
-Every single concept, domain rule, and architectural decision was documented outside the project repository in a dedicated lessons syllabus:
+After submitting, I found that the ingestion script had a fallback that generated synthetic forecasts whenever an Elexon request came back incomplete. Some of those synthetic rows reached the deployed database and were being selected instead of real forecasts, which inflated the error figures shown in the original video (for example, a day MAE of 11.8 GW instead of the real 1.1 GW on 15 January). Fixes:
 
-- [Lesson 1: UK Electricity Market & Domain Physics](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/01-uk-electricity-market-and-domain.md)
-- [Lesson 2: Database Design, Beekeeper Studio & Neon Serverless](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/02-database-design-beekeeper-and-neon.md)
-- [Lesson 2b: Elexon Data Ingestion & Hourly-to-Half-Hour Matching](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/02b-elexon-data-ingestion-and-hourly-matching.md)
-- [Lesson 3: Forecast Error Quantification & Thermal Risk Math](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/03-forecast-error-quantification-and-thermal-risk-math.md)
-- [Lesson 3b: Sub-2ms As-Of Engine & Procurement Advisor Formulation](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/03b-as-of-engine-and-thermal-procurement-advisor.md)
-- [Lesson 4: FastAPI Clean Backend Architecture & Pydantic v2](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/04-fastapi-backend-architecture-and-api-contracts.md)
-- [Lesson 5: React 18, TypeScript & Zustand State Management](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/05-react-typescript-trader-ui.md)
-- [Lesson 6: Multi-Stage Dockerization, Neon Cloud & Vercel Deployment](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/06-docker-deployment-and-cloud.md)
-- [Lesson 7: Video Presentation Guide & Word-for-Word Pitch Scripts](file:///Users/tejovarmaalluri/Projects/uk-energy-dayahead-iq-lessons/07-10-minute-video-scripts.md)
+- Removed the synthetic fallback. Ingestion now uses real Elexon data only and stops on any API error. The database was reloaded.
+- The procurement buffer previously used the delivery day's own actuals (look-ahead). It now uses only days settled before the decision.
+- The evaluation window now matches decisions made in January (delivery 2 Jan to 1 Feb).
+- Added the forecast-horizon analysis.
+- Tests now run on a seeded test database and assert the point-in-time and no-look-ahead rules.
+
+The screens and workflow are the same as in the video; only the numbers changed.
 
 ---
 
-## 11. AI Tooling Disclosure
-In accordance with the challenge guidelines (*"Please mention it explicitly in the README if you've used AI tools"*), **Claude Code** and **Google Antigravity** were used as AI pair-programming assistants to accelerate domain research on Elexon BMRS market specs, assist in scaffolding initial boilerplate, and facilitate architectural discussions. All core temporal As-Of join query optimizations, Elexon hourly-to-half-hourly settlement matching logic, mathematical formulas, and test suites were verified and validated through engineering rigor.
+## 10. AI tooling disclosure
 
----
-
-## License
-MIT License. Built for enterprise energy analytics and technical evaluation.
+In accordance with the challenge guidelines, **Claude Code** and **Google Antigravity** were used as AI pair-programming assistants for domain research on Elexon BMRS datasets, scaffolding, code review and architectural discussion. All logic, queries and metrics were reviewed and verified against the raw Elexon data and the test suite.
