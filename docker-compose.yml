@@ -28,7 +28,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-energy_trader}:${POSTGRES_PASSWORD:-energy_secure_pwd_2026}@postgres:5432/${POSTGRES_DB:-wind_procure_iq}
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173"
+      CORS_ORIGINS: '["http://localhost:3000", "http://localhost:5173"]'
       DEFAULT_DECISION_CUTOFF_HOUR: 11
       ENVIRONMENT: production
     ports:
