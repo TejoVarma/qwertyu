@@ -9,9 +9,9 @@ Data: Elexon BMRS only, national level: `FUELHH` (fuelType `WIND`) for actuals a
 
 | | |
 | :--- | :--- |
-| **Live app** | _VERCEL_URL_ |
+| **Live app** | https://qwertyu-delta.vercel.app |
 | **API docs (Swagger)** | https://windprocure-api.onrender.com/docs |
-| **Video walkthrough** | _VIDEO_URL_ |
+| **Video walkthrough** | https://youtu.be/qO-TAGCj2Zk |
 
 ---
 
