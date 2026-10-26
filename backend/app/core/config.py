@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import field_validator, Field
 from pathlib import Path
+from datetime import date
 
 # Resolve base directories
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -35,19 +36,22 @@ class Settings(BaseSettings):
         description="Hour of day on D-1 for Day-Ahead market gate closure (0-23 UTC)"
     )
     
-    # Great Britain Installed Wind Capacity Benchmark (~30 GW in 2026) for nMAE calculation
-    INSTALLED_WIND_CAPACITY_MW: float = Field(
-        default=30000.0,
-        gt=0.0,
-        description="Total installed wind capacity in MW used for normalizing forecast error"
-    )
-    
+    # Evaluation window: delivery days whose purchase decision falls in January 2026
+    # (decision on D-1, so delivery runs from 2 Jan to 1 Feb).
+    EVALUATION_START_DATE: date = date(2026, 1, 2)
+    EVALUATION_END_DATE: date = date(2026, 2, 1)
+
+    # Trailing settled days used to size the procurement safety buffer
+    BUFFER_LOOKBACK_DAYS: int = Field(default=14, ge=1, le=60)
+
+    # Forecast horizons (hours before delivery) evaluated by the horizon analysis
+    HORIZON_HOURS: list[int] = [1, 2, 4, 6, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48]
+
     # CORS Origins for Frontend Integration
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "*"
     ]
 
     model_config = SettingsConfigDict(

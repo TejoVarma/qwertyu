@@ -1,18 +1,20 @@
 import math
 from typing import Any
 import numpy as np
-from app.core.config import settings
 
 
 class MetricsCalculator:
     """
     High-performance statistical metrics calculator for UK Day-Ahead wind forecast evaluation.
-    Computes industry-standard error metrics (MAE, RMSE, Bias, nMAE), energy volumes (MWh),
+    Computes industry-standard error metrics (MAE, RMSE, Bias, MAE relative to mean actual), energy volumes (MWh),
     P90/P95 downside shortfall risk, diurnal Settlement Period profiles, and daily roll-ups.
     """
 
-    def __init__(self, installed_capacity_mw: float | None = None):
-        self.installed_capacity_mw = installed_capacity_mw or settings.INSTALLED_WIND_CAPACITY_MW
+    @staticmethod
+    def _relative_mae_pct(mae: float, actuals: np.ndarray) -> float:
+        """MAE as a percentage of mean metered wind generation over the same periods."""
+        mean_actual = float(np.mean(actuals))
+        return (mae / mean_actual) * 100.0 if mean_actual > 0 else 0.0
 
     def calculate_daily_summary(self, points: list[dict[str, Any]]) -> dict[str, Any]:
         """
@@ -44,7 +46,7 @@ class MetricsCalculator:
         mae = float(np.mean(np.abs(errors)))
         rmse = float(np.sqrt(np.mean(errors ** 2)))
         bias = float(np.mean(errors))
-        nmae_pct = float((mae / self.installed_capacity_mw) * 100.0)
+        nmae_pct = self._relative_mae_pct(mae, actuals)
 
         peak_shortfall = float(np.max(shortfalls))
         p90_shortfall = float(np.percentile(shortfalls, 90))
@@ -62,11 +64,11 @@ class MetricsCalculator:
         }
 
     def calculate_monthly_metrics(
-        self, points: list[dict[str, Any]], month_label: str = "January 2026"
+        self, points: list[dict[str, Any]], month_label: str = "January 2026 decisions"
     ) -> dict[str, Any]:
         """
         Computes comprehensive quantitative evaluation statistics across an entire month:
-        - Overall summary metrics (MAE, RMSE, Bias, nMAE, P90/P95)
+        - Overall summary metrics (MAE, RMSE, Bias, relative MAE, P90/P95)
         - Diurnal breakdown across all 48 Settlement Periods
         - Daily roll-up table (Jan 1 to Jan 31)
         """
@@ -93,7 +95,7 @@ class MetricsCalculator:
         mae = float(np.mean(np.abs(errors)))
         rmse = float(np.sqrt(np.mean(errors ** 2)))
         bias = float(np.mean(errors))
-        nmae_pct = float((mae / self.installed_capacity_mw) * 100.0)
+        nmae_pct = self._relative_mae_pct(mae, actuals)
 
         p90_shortfall = float(np.percentile(shortfalls, 90))
         p95_shortfall = float(np.percentile(shortfalls, 95))
@@ -164,7 +166,6 @@ class MetricsCalculator:
         return {
             "evaluation_month": month_label,
             "total_periods_evaluated": n,
-            "installed_capacity_benchmark_mw": self.installed_capacity_mw,
             "mae_mw": round(mae, 1),
             "rmse_mw": round(rmse, 1),
             "mean_bias_mw": round(bias, 1),
@@ -175,4 +176,26 @@ class MetricsCalculator:
             "under_forecast_count": under_forecast_count,
             "diurnal_profile": diurnal_profile,
             "daily_summary": daily_summary,
+        }
+
+    @staticmethod
+    def calculate_horizon_metrics(horizon_hours: int, pairs: list[tuple[float, float]]) -> dict[str, Any]:
+        """Error statistics for forecasts issued at least horizon_hours before delivery."""
+        if not pairs:
+            return {
+                "horizon_hours": horizon_hours, "sample_count": 0, "mae_mw": 0.0, "rmse_mw": 0.0,
+                "bias_mw": 0.0, "relative_mae_pct": 0.0, "p90_abs_error_mw": 0.0,
+            }
+        forecasts = np.array([f for f, _ in pairs], dtype=np.float64)
+        actuals = np.array([a for _, a in pairs], dtype=np.float64)
+        errors = forecasts - actuals
+        mae = float(np.mean(np.abs(errors)))
+        return {
+            "horizon_hours": horizon_hours,
+            "sample_count": len(pairs),
+            "mae_mw": round(mae, 1),
+            "rmse_mw": round(float(np.sqrt(np.mean(errors ** 2))), 1),
+            "bias_mw": round(float(np.mean(errors)), 1),
+            "relative_mae_pct": round(MetricsCalculator._relative_mae_pct(mae, actuals), 2),
+            "p90_abs_error_mw": round(float(np.percentile(np.abs(errors), 90)), 1),
         }

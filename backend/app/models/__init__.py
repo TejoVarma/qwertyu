@@ -11,6 +11,8 @@ from app.models.schemas import (
     ProcurementAdvisorRequest,
     ProcurementAdvisorResponse,
     ProcurementSchedulePoint,
+    HorizonMetric,
+    HorizonAnalysisResponse,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "ProcurementAdvisorRequest",
     "ProcurementAdvisorResponse",
     "ProcurementSchedulePoint",
+    "HorizonMetric",
+    "HorizonAnalysisResponse",
 ]

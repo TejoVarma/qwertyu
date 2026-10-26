@@ -20,7 +20,7 @@ metrics_calculator = MetricsCalculator()
 async def get_day_ahead_decision(
     delivery_date: date = Query(
         default=date(2026, 1, 15),
-        description="Target delivery date in January 2026 (e.g. 2026-01-15)",
+        description="Delivery date, 2026-01-02 to 2026-02-01 (e.g. 2026-01-15)",
     ),
     cutoff_hour: int = Query(
         default=11,
@@ -37,7 +37,7 @@ async def get_day_ahead_decision(
     if snapshot["periods_count"] == 0:
         raise HTTPException(
             status_code=404,
-            detail=f"No settlement data found for delivery date {delivery_date}. Ensure database is seeded with January 2026 data.",
+            detail=f"No settlement data found for delivery date {delivery_date}. Run scripts/ingest_data.py to load Elexon data.",
         )
 
     kpis = metrics_calculator.calculate_daily_summary(snapshot["settlement_periods"])

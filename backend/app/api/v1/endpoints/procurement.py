@@ -1,4 +1,6 @@
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException
+from app.core.config import settings
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.models import ProcurementAdvisorRequest, ProcurementAdvisorResponse
@@ -13,8 +15,8 @@ procurement_advisor = ProcurementAdvisor()
 @router.post(
     "/advisor",
     response_model=ProcurementAdvisorResponse,
-    summary="Calculate Thermal Procurement Schedule & Reserve Buffer",
-    description="Translates the 48-period Day-Ahead wind forecast and P90 error risk into a recommended thermal hedge.",
+    summary="Illustrative Thermal Requirement & Safety Buffer",
+    description="Combines the decision-time wind forecast, a user-supplied demand curve and the P90 shortfall observed over the previous settled days (no look-ahead) into an indicative thermal requirement.",
 )
 async def calculate_procurement_advice(
     req: ProcurementAdvisorRequest,
@@ -30,8 +32,17 @@ async def calculate_procurement_advice(
             detail=f"No settlement data found for delivery date {req.delivery_date}.",
         )
 
+    # Size the buffer only from delivery days fully metered before the D-1 decision:
+    # day D-2 is the most recent complete day, so the window ends there.
+    history_end = req.delivery_date - timedelta(days=2)
+    history_start = history_end - timedelta(days=settings.BUFFER_LOOKBACK_DAYS - 1)
+    history_points = await as_of_engine.get_range_snapshot(
+        session=db, start_date=history_start, end_date=history_end, cutoff_hour=req.cutoff_hour
+    )
+
     advice = procurement_advisor.calculate_procurement_schedule(
         settlement_points=snapshot["settlement_periods"],
+        history_points=history_points,
         risk_tolerance=req.risk_tolerance,
         peak_demand_mw=req.peak_demand_mw,
         custom_demand=req.custom_demand,
@@ -40,6 +51,8 @@ async def calculate_procurement_advice(
     return ProcurementAdvisorResponse(
         delivery_date=snapshot["delivery_date"],
         decision_cutoff_used=snapshot["decision_cutoff_used"],
+        buffer_history_start=history_start,
+        buffer_history_end=history_end,
         risk_tolerance_coefficient=advice["risk_tolerance_coefficient"],
         risk_tolerance_label=advice["risk_tolerance_label"],
         peak_consumer_demand_mw=advice["peak_consumer_demand_mw"],

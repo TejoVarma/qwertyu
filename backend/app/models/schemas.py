@@ -67,11 +67,10 @@ class DailySummaryItem(BaseModel):
 class MonthlyAccuracyMetrics(BaseModel):
     evaluation_month: str
     total_periods_evaluated: int
-    installed_capacity_benchmark_mw: float
     mae_mw: float
     rmse_mw: float
     mean_bias_mw: float
-    normalized_mae_pct: float
+    normalized_mae_pct: float = Field(description="MAE as % of mean metered wind generation")
     p90_shortfall_mw: float
     p95_shortfall_mw: float
     over_forecast_count: int
@@ -94,11 +93,11 @@ class ProcurementSchedulePoint(BaseModel):
 
 
 class ProcurementAdvisorRequest(BaseModel):
-    delivery_date: date = Field(default=date(2026, 1, 15), description="Target delivery day in January 2026")
+    delivery_date: date = Field(default=date(2026, 1, 15), description="Target delivery day (2026-01-02 to 2026-02-01)")
     cutoff_hour: int = Field(default=11, ge=0, le=23, description="Day-Ahead Gate Closure hour on D-1 (0-23 UTC)")
     risk_tolerance: float = Field(default=1.0, ge=0.1, le=2.5, description="Risk tolerance multiplier for P90 buffer")
-    peak_demand_mw: float = Field(default=38000.0, gt=0.0, description="Peak evening consumer demand in MW")
-    custom_demand: list[float] | None = Field(default=None, description="Optional 48-point custom consumer demand curve")
+    peak_demand_mw: float = Field(default=38000.0, gt=0.0, description="Peak of the illustrative demand curve in MW (user input, not Elexon data)")
+    custom_demand: list[float] | None = Field(default=None, min_length=48, max_length=48, description="Optional 48-point demand forecast supplied by the client")
 
     model_config = {
         "json_schema_extra": {
@@ -115,6 +114,8 @@ class ProcurementAdvisorRequest(BaseModel):
 class ProcurementAdvisorResponse(BaseModel):
     delivery_date: date
     decision_cutoff_used: datetime
+    buffer_history_start: date = Field(description="First settled delivery day used to size the safety buffer")
+    buffer_history_end: date = Field(description="Last settled delivery day used to size the safety buffer (D-2)")
     risk_tolerance_coefficient: float
     risk_tolerance_label: str
     peak_consumer_demand_mw: float
@@ -124,3 +125,20 @@ class ProcurementAdvisorResponse(BaseModel):
     total_thermal_safety_reserve_mwh: float
     average_thermal_buffer_mw: float
     schedule: list[ProcurementSchedulePoint]
+
+
+# --- Forecast Horizon Analysis Schemas ---
+class HorizonMetric(BaseModel):
+    horizon_hours: int = Field(description="Forecast issued at least this many hours before delivery")
+    sample_count: int
+    mae_mw: float
+    rmse_mw: float
+    bias_mw: float
+    relative_mae_pct: float = Field(description="MAE as % of mean metered wind generation")
+    p90_abs_error_mw: float
+
+
+class HorizonAnalysisResponse(BaseModel):
+    start_date: date
+    end_date: date
+    horizons: list[HorizonMetric]

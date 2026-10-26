@@ -1,4 +1,4 @@
-import math
+import numpy as np
 from typing import Any
 
 
@@ -11,7 +11,8 @@ class ProcurementAdvisor:
     @staticmethod
     def get_baseline_consumer_demand_profile(peak_demand_mw: float = 38000.0) -> list[float]:
         """
-        Generates a realistic 48-period UK winter diurnal consumer demand profile (in MW).
+        Illustrative 48-period winter demand shape (in MW), scaled to peak_demand_mw.
+        A placeholder for the client's own demand forecast, which is outside the Elexon wind dataset.
         - Overnight Base (SPs 1-12, 00:00-06:00): ~22,000 - 24,000 MW
         - Morning Peak (SPs 15-18, 07:00-09:00): ~33,000 - 35,000 MW
         - Midday Plateau (SPs 19-32, 09:30-16:00): ~30,000 - 32,000 MW
@@ -31,22 +32,36 @@ class ProcurementAdvisor:
         ]
         return [round(factor * peak_demand_mw, 1) for factor in base_shape]
 
+    @staticmethod
+    def historical_p90_shortfall_by_period(history_points: list[dict[str, Any]]) -> dict[int, float]:
+        """
+        P90 of past shortfalls (forecast above actual) for each settlement period.
+        history_points must only contain delivery days fully settled before the decision cutoff.
+        """
+        by_sp: dict[int, list[float]] = {}
+        for p in history_points:
+            by_sp.setdefault(p["settlement_period"], []).append(p["shortfall_mw"])
+        return {sp: float(np.percentile(vals, 90)) for sp, vals in by_sp.items()}
+
     def calculate_procurement_schedule(
         self,
         settlement_points: list[dict[str, Any]],
+        history_points: list[dict[str, Any]],
         risk_tolerance: float = 1.0,
         peak_demand_mw: float = 38000.0,
         custom_demand: list[float] | None = None,
     ) -> dict[str, Any]:
         """
-        Calculates the 48-period Thermal Procurement Target for the trading desk:
-        Thermal Target = max(0, Demand - Wind Forecast) + (risk_tolerance * P90 Shortfall)
+        Illustrative 48-period thermal requirement for the trading desk:
+        Thermal Target = max(0, Demand - Wind Forecast) + risk_tolerance * historical P90 shortfall for that period.
+        Demand is an input supplied by the user (it is not part of the Elexon wind data),
+        and the buffer uses only errors observed before the decision, never the delivery day's actuals.
         """
         demand_profile = custom_demand or self.get_baseline_consumer_demand_profile(peak_demand_mw)
-        
-        # Sort points by settlement period (1 to 48)
+        p90_by_sp = self.historical_p90_shortfall_by_period(history_points)
+
         points_sorted = sorted(settlement_points, key=lambda p: p["settlement_period"])
-        
+
         schedule = []
         total_demand_mwh = 0.0
         total_wind_expected_mwh = 0.0
@@ -55,24 +70,16 @@ class ProcurementAdvisor:
 
         for i, point in enumerate(points_sorted):
             sp = point["settlement_period"]
-            # Index into demand profile (0 to 47)
             demand_mw = demand_profile[min(i, len(demand_profile) - 1)]
             wind_forecast_mw = point["forecast_mw"]
             actual_wind_mw = point.get("actual_mw", 0.0)
 
-            # Net Demand (demand remaining after wind generation)
             net_demand_mw = max(0.0, demand_mw - wind_forecast_mw)
-            
-            # Use point's historical shortfall as the local risk metric
-            # Base P90 hedge on point shortfall or minimum contingency
-            base_shortfall = point.get("shortfall_mw", point.get("error_mw", 500.0))
-            safety_buffer_mw = round(max(100.0, risk_tolerance * max(0.0, base_shortfall)), 1)
+            safety_buffer_mw = round(risk_tolerance * p90_by_sp.get(sp, 0.0), 1)
 
-            # Final recommended thermal procurement target
             thermal_target_mw = round(net_demand_mw + safety_buffer_mw, 1)
             curtailment_spill_mw = round(max(0.0, wind_forecast_mw - demand_mw), 1)
 
-            # Accumulate energy volumes (MWh = MW * 0.5 hours)
             total_demand_mwh += demand_mw * 0.5
             total_wind_expected_mwh += wind_forecast_mw * 0.5
             total_thermal_mwh += thermal_target_mw * 0.5
@@ -87,6 +94,7 @@ class ProcurementAdvisor:
                 "time_label": time_label,
                 "consumer_demand_mw": round(demand_mw, 1),
                 "wind_forecast_mw": wind_forecast_mw,
+                # Shown for back-testing only; never used in the calculation above.
                 "actual_wind_mw": actual_wind_mw,
                 "net_demand_mw": round(net_demand_mw, 1),
                 "thermal_safety_buffer_mw": safety_buffer_mw,
