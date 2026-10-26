@@ -40,8 +40,8 @@ def test_as_of_cutoff_calculation():
 
 
 def test_metrics_calculator_mathematical_precision():
-    """Verifies statistical formulations: MAE, RMSE, Mean Bias, and nMAE."""
-    calc = MetricsCalculator(installed_capacity_mw=30000.0)
+    """Verifies statistical formulations: MAE, RMSE, Mean Bias, and MAE relative to mean actual."""
+    calc = MetricsCalculator()
 
     # Known synthetic test points
     test_points = [
@@ -63,40 +63,50 @@ def test_metrics_calculator_mathematical_precision():
     assert res["day_rmse_mw"] == 158.1
     assert res["day_rmse_mw"] >= res["day_mae_mw"]
 
-    # nMAE % = (150.0 / 30000.0) * 100 = 0.5%
-    assert res["normalized_mae_pct"] == 0.5
+    # Relative MAE % = 150.0 / mean actual (1000.0) * 100 = 15%
+    assert res["normalized_mae_pct"] == 15.0
 
     # Peak Shortfall = max(100, 0, 200, 0) = 200.0
     assert res["peak_shortfall_mw"] == 200.0
 
 
-def test_procurement_advisor_hedging_logic():
-    """Verifies that higher risk tolerance produces higher safety reserve buffers."""
+def test_procurement_buffer_uses_history_not_delivery_day():
+    """The buffer comes from past shortfalls only; the delivery day's own actuals must not affect it."""
     advisor = ProcurementAdvisor()
 
-    test_points = [
-        {
-            "settlement_period": 35,
-            "forecast_mw": 10000.0,
-            "actual_mw": 9000.0,
-            "shortfall_mw": 1000.0,
-        }
+    delivery_points = [
+        {"settlement_period": 35, "forecast_mw": 10000.0, "actual_mw": 2000.0, "shortfall_mw": 8000.0},
+    ]
+    # Ten settled days at SP 35 with shortfalls 0, 100, ..., 900 MW -> P90 = 810 MW
+    history_points = [
+        {"settlement_period": 35, "forecast_mw": 0.0, "actual_mw": 0.0, "shortfall_mw": float(100 * i)}
+        for i in range(10)
     ]
 
-    # Consumer demand at SP 35 is ~37,620 MW (Evening peak)
-    res_aggressive = advisor.calculate_procurement_schedule(test_points, risk_tolerance=0.5, peak_demand_mw=38000.0)
-    res_standard = advisor.calculate_procurement_schedule(test_points, risk_tolerance=1.0, peak_demand_mw=38000.0)
-    res_conservative = advisor.calculate_procurement_schedule(test_points, risk_tolerance=1.5, peak_demand_mw=38000.0)
+    res_aggressive = advisor.calculate_procurement_schedule(delivery_points, history_points, risk_tolerance=0.5)
+    res_standard = advisor.calculate_procurement_schedule(delivery_points, history_points, risk_tolerance=1.0)
+    res_conservative = advisor.calculate_procurement_schedule(delivery_points, history_points, risk_tolerance=1.5)
 
-    # Net demand should be identical
     p_agg = res_aggressive["schedule"][0]
     p_std = res_standard["schedule"][0]
     p_con = res_conservative["schedule"][0]
 
     assert p_agg["net_demand_mw"] == p_std["net_demand_mw"] == p_con["net_demand_mw"]
+    assert p_std["thermal_safety_buffer_mw"] == 810.0  # not the delivery day's 8000 MW shortfall
+    assert p_agg["thermal_safety_buffer_mw"] == 405.0
+    assert p_con["thermal_safety_buffer_mw"] == 1215.0
 
-    # Safety buffer scales with risk tolerance coefficient alpha
-    assert p_con["thermal_safety_buffer_mw"] > p_std["thermal_safety_buffer_mw"] > p_agg["thermal_safety_buffer_mw"]
-    assert p_std["thermal_safety_buffer_mw"] == 1000.0  # 1.0 * 1000 MW shortfall
-    assert p_agg["thermal_safety_buffer_mw"] == 500.0   # 0.5 * 1000 MW shortfall
-    assert p_con["thermal_safety_buffer_mw"] == 1500.0  # 1.5 * 1000 MW shortfall
+
+def test_procurement_buffer_is_zero_without_history():
+    advisor = ProcurementAdvisor()
+    points = [{"settlement_period": 1, "forecast_mw": 5000.0, "actual_mw": 4000.0, "shortfall_mw": 1000.0}]
+    res = advisor.calculate_procurement_schedule(points, history_points=[])
+    assert res["schedule"][0]["thermal_safety_buffer_mw"] == 0.0
+
+
+def test_horizon_metrics():
+    res = MetricsCalculator.calculate_horizon_metrics(24, [(1100.0, 1000.0), (900.0, 1000.0)])
+    assert res["sample_count"] == 2
+    assert res["mae_mw"] == 100.0
+    assert res["bias_mw"] == 0.0
+    assert res["relative_mae_pct"] == 10.0
