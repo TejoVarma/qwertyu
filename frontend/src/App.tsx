@@ -56,21 +56,21 @@ export const App: React.FC = () => {
             {/* Quick Context Strip */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
               <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800">
-                <span className="text-slate-400 block mb-1">MARKET GATE CLOSURE</span>
-                <span className="text-white font-bold">11:00 UTC on D-1 (EPEX SPOT GB)</span>
-                <p className="text-[11px] text-slate-500 mt-1">Forecasts published after this cutoff are legally inadmissible.</p>
+                <span className="text-slate-400 block mb-1">DECISION CUTOFF</span>
+                <span className="text-white font-bold">{decisionData ? new Date(decisionData.decision_cutoff_used).toISOString().slice(0, 16).replace('T', ' ') : '--'} UTC</span>
+                <p className="text-[11px] text-slate-500 mt-1">Only forecasts published at or before this time are used: exactly what the desk could see when bidding.</p>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800">
-                <span className="text-slate-400 block mb-1">IMBALANCE PRICING RISK</span>
-                <span className="text-rose-400 font-bold">System Buy Price Exposure</span>
-                <p className="text-[11px] text-slate-500 mt-1">Shortfalls during evening peaks settle at punitive cash-out prices (£500+/MWh).</p>
+                <span className="text-slate-400 block mb-1">IMBALANCE RISK</span>
+                <span className="text-rose-400 font-bold">Wind below forecast = short position</span>
+                <p className="text-[11px] text-slate-500 mt-1">Any shortfall not covered day-ahead must be bought later, intraday or at imbalance prices.</p>
               </div>
 
               <div className="p-4 rounded-xl bg-slate-900/50 border border-slate-800">
-                <span className="text-slate-400 block mb-1">NATIONAL WIND BENCHMARK</span>
-                <span className="text-cyan-400 font-bold">30,000 MW Installed Capacity</span>
-                <p className="text-[11px] text-slate-500 mt-1">Day nMAE: {decisionData?.normalized_mae_pct || '0'}% of total GB wind fleet.</p>
+                <span className="text-slate-400 block mb-1">RELATIVE ERROR</span>
+                <span className="text-cyan-400 font-bold">{decisionData?.normalized_mae_pct ?? 0}% of mean generation</span>
+                <p className="text-[11px] text-slate-500 mt-1">Day MAE divided by the day's mean metered wind output.</p>
               </div>
             </div>
           </div>
@@ -84,8 +84,8 @@ export const App: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-base font-bold text-white">January 2026 Daily Performance Registry</h2>
-                <p className="text-xs text-slate-400">Complete day-by-day record of forecast energy, metered energy, and volumetric imbalances.</p>
+                <h2 className="text-base font-bold text-white">Daily Performance: January 2026 Decisions</h2>
+                <p className="text-xs text-slate-400">Delivery days 2 Jan to 1 Feb: forecast energy at decision time vs metered energy.</p>
               </div>
             </div>
             <AccuracyLab />
@@ -98,7 +98,7 @@ export const App: React.FC = () => {
       <footer className="border-t border-slate-800/80 bg-slate-900/40 py-4 px-4 text-center text-xs text-slate-500 font-mono">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           <span>WindProcure IQ • UK Day-Ahead Decision Support System</span>
-          <span className="text-[11px]">Data Source: Elexon BMRS API (FUELHH & WINDFOR Streams) • January 2026</span>
+          <span className="text-[11px]">Data Source: Elexon BMRS (FUELHH WIND & WINDFOR) • January 2026 decisions</span>
           <span className="text-cyan-500/80">React 18 • TypeScript • Zustand • FastAPI • PostgreSQL</span>
         </div>
       </footer>

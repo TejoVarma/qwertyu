@@ -50,7 +50,6 @@ export interface DailySummaryItem {
 export interface MonthlyAccuracyMetrics {
   evaluation_month: string;
   total_periods_evaluated: number;
-  installed_capacity_benchmark_mw: number;
   mae_mw: number;
   rmse_mw: number;
   mean_bias_mw: number;
@@ -78,6 +77,8 @@ export interface ProcurementSchedulePoint {
 export interface ProcurementAdvisorResponse {
   delivery_date: string;
   decision_cutoff_used: string;
+  buffer_history_start: string;
+  buffer_history_end: string;
   risk_tolerance_coefficient: number;
   risk_tolerance_label: string;
   peak_consumer_demand_mw: number;
@@ -87,6 +88,22 @@ export interface ProcurementAdvisorResponse {
   total_thermal_safety_reserve_mwh: number;
   average_thermal_buffer_mw: number;
   schedule: ProcurementSchedulePoint[];
+}
+
+export interface HorizonMetric {
+  horizon_hours: number;
+  sample_count: number;
+  mae_mw: number;
+  rmse_mw: number;
+  bias_mw: number;
+  relative_mae_pct: number;
+  p90_abs_error_mw: number;
+}
+
+export interface HorizonAnalysisResponse {
+  start_date: string;
+  end_date: string;
+  horizons: HorizonMetric[];
 }
 
 export interface HealthStatus {

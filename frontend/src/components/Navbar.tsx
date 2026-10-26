@@ -61,8 +61,8 @@ export const Navbar: React.FC = () => {
               <span className="text-[10px] uppercase text-slate-400 font-medium tracking-wider">Delivery Day (D)</span>
               <input
                 type="date"
-                min="2026-01-01"
-                max="2026-01-31"
+                min="2026-01-02"
+                max="2026-02-01"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="bg-transparent text-xs font-mono text-white focus:outline-none cursor-pointer"
@@ -74,7 +74,7 @@ export const Navbar: React.FC = () => {
           <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800">
             <Clock className="w-4 h-4 text-amber-400" />
             <div className="flex flex-col">
-              <span className="text-[10px] uppercase text-slate-400 font-medium tracking-wider">Gate Closure (D-1)</span>
+              <span className="text-[10px] uppercase text-slate-400 font-medium tracking-wider">Decision Cutoff (D-1)</span>
               <select
                 value={cutoffHour}
                 onChange={(e) => setCutoffHour(Number(e.target.value))}
@@ -82,7 +82,7 @@ export const Navbar: React.FC = () => {
               >
                 <option value={6} className="bg-slate-900">06:00 UTC (Early Outlook)</option>
                 <option value={9} className="bg-slate-900">09:00 UTC (Pre-Auction)</option>
-                <option value={11} className="bg-slate-900">11:00 UTC (Official Gate)</option>
+                <option value={11} className="bg-slate-900">11:00 UTC (Default)</option>
                 <option value={14} className="bg-slate-900">14:00 UTC (Post-Auction)</option>
               </select>
             </div>
@@ -114,7 +114,7 @@ export const Navbar: React.FC = () => {
           <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-900/60 text-xs text-emerald-300">
             <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
             <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-emerald-400/80 font-bold">Elexon Live Stream</span>
+              <span className="text-[9px] uppercase tracking-wider text-emerald-400/80 font-bold">Elexon BMRS Data</span>
               <span className="font-mono text-[11px] text-emerald-200">
                 {health?.forecasts_count ? `${health.forecasts_count.toLocaleString()} forecasts` : 'Connecting...'}
               </span>
@@ -168,7 +168,7 @@ export const Navbar: React.FC = () => {
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
           }`}
         >
-          January 2026 Daily Log
+          Daily Log (Jan 2026 Decisions)
         </button>
       </div>
     </header>

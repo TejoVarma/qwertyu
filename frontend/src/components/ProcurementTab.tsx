@@ -99,7 +99,7 @@ export const ProcurementTab: React.FC = () => {
           {/* Peak Demand Input */}
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-400">Peak Consumer Demand (MW)</span>
+              <span className="text-slate-400">Peak Demand, illustrative (MW)</span>
               <span className="font-mono text-cyan-400 font-bold">{peakDemandMw.toLocaleString()} MW</span>
             </div>
             <input
@@ -143,7 +143,10 @@ export const ProcurementTab: React.FC = () => {
           <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 leading-relaxed">
             <ShieldCheck className="w-4 h-4 text-emerald-400 inline mr-1.5" />
             <span>
-              <strong>P90 Guarantee</strong>: Hedging with α = {riskTolerance} covers wind drop-off risks 90% of the time, protecting against cash-out imbalance spikes (£500+/MWh).
+              <strong>How the buffer is sized</strong>: for each settlement period, α × the 90th percentile of wind shortfalls
+              on settled delivery days {procurementData.buffer_history_start} to {procurementData.buffer_history_end}.
+              Only data available before the decision is used. The demand curve is an illustrative input:
+              in production the client&apos;s own demand forecast replaces it.
             </span>
           </div>
         </div>
@@ -156,7 +159,7 @@ export const ProcurementTab: React.FC = () => {
             <div className="text-2xl font-bold font-mono text-white mt-2">
               {procurementData.total_consumer_demand_mwh.toLocaleString()} <span className="text-xs text-slate-400 font-normal">MWh</span>
             </div>
-            <span className="text-[11px] text-purple-400 font-mono mt-1">Winter Consumer Load</span>
+            <span className="text-[11px] text-purple-400 font-mono mt-1">Illustrative demand input</span>
           </div>
 
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 flex flex-col justify-between">
@@ -184,14 +187,15 @@ export const ProcurementTab: React.FC = () => {
                 <Flame className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-sm font-bold text-white">Recommended CCGT / Thermal Hedging Strategy</h4>
+                <h4 className="text-sm font-bold text-white">Indicative Day-Ahead Requirement</h4>
                 <p className="text-xs text-slate-400">
-                  Submit firm purchase bids for <strong className="text-amber-300">{procurementData.total_recommended_thermal_procurement_mwh.toLocaleString()} MWh</strong> in the Day-Ahead auction before 11:00 UTC.
+                  About <strong className="text-amber-300">{procurementData.total_recommended_thermal_procurement_mwh.toLocaleString()} MWh</strong> beyond wind,
+                  given the demand input and the decision-time wind forecast.
                 </p>
               </div>
             </div>
             <span className="hidden sm:inline-flex items-center gap-1 text-xs font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800 px-3 py-1.5 rounded-lg">
-              <span>Ready for Auction</span>
+              <span>What-if scenario</span>
               <ArrowUpRight className="w-3.5 h-3.5" />
             </span>
           </div>
@@ -204,9 +208,9 @@ export const ProcurementTab: React.FC = () => {
       <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-bold text-base text-white">48 Settlement Period Procurement Schedule</h3>
+            <h3 className="font-bold text-base text-white">48 Settlement Period Requirement (What-If)</h3>
             <p className="text-xs text-slate-400">
-              Shows how the recommended thermal target wraps consumer demand around wind fluctuations.
+              Net demand after the decision-time wind forecast, plus the historical P90 shortfall buffer.
             </p>
           </div>
           <span className="text-xs font-mono text-amber-400 bg-amber-950/60 border border-amber-800/50 px-2.5 py-1 rounded-full">
@@ -256,7 +260,7 @@ export const ProcurementTab: React.FC = () => {
               <Line
                 type="monotone"
                 dataKey="consumer_demand"
-                name="Gross Consumer Demand (MW)"
+                name="Demand Input (MW)"
                 stroke="#a855f7"
                 strokeWidth={2}
                 dot={false}

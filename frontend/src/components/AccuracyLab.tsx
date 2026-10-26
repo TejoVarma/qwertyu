@@ -3,6 +3,8 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -13,12 +15,12 @@ import { BarChart3, TrendingUp, AlertTriangle, ShieldCheck, Calendar } from 'luc
 import { useTraderStore } from '../store/useTraderStore';
 
 export const AccuracyLab: React.FC = () => {
-  const { monthlyData } = useTraderStore();
+  const { monthlyData, horizonData, cutoffHour } = useTraderStore();
 
   if (!monthlyData || monthlyData.diurnal_profile.length === 0) {
     return (
       <div className="h-96 rounded-2xl bg-slate-900/50 border border-slate-800 flex items-center justify-center text-slate-500">
-        Loading January 2026 monthly accuracy data...
+        Loading accuracy data for January 2026 decisions...
       </div>
     );
   }
@@ -31,6 +33,16 @@ export const AccuracyLab: React.FC = () => {
     bias: d.bias_mw,
     p90: d.p90_shortfall_mw,
   }));
+
+  const horizonChartData = (horizonData?.horizons ?? [])
+    .filter((h) => h.sample_count > 0)
+    .map((h) => ({
+      horizon: `${h.horizon_hours}h`,
+      mae: h.mae_mw,
+      p90: h.p90_abs_error_mw,
+      bias: h.bias_mw,
+      samples: h.sample_count,
+    }));
 
   const DiurnalTooltip = ({ active, payload }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -97,13 +109,13 @@ export const AccuracyLab: React.FC = () => {
         {/* Normalized MAE (nMAE) */}
         <div className="p-4 rounded-xl bg-slate-900/70 border border-slate-800">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-            <span>Normalized nMAE</span>
+            <span>Relative MAE</span>
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           </div>
           <div className="text-xl font-bold font-mono text-emerald-400">
             {monthlyData.normalized_mae_pct}%
           </div>
-          <span className="text-[10px] text-slate-400 font-mono mt-0.5 inline-block">vs 30,000 MW GB capacity</span>
+          <span className="text-[10px] text-slate-400 font-mono mt-0.5 inline-block">of mean metered wind output</span>
         </div>
 
         {/* Mean Bias Error */}
@@ -115,7 +127,9 @@ export const AccuracyLab: React.FC = () => {
           <div className="text-xl font-bold font-mono text-amber-300">
             {monthlyData.mean_bias_mw > 0 ? `+${monthlyData.mean_bias_mw.toLocaleString()}` : monthlyData.mean_bias_mw.toLocaleString()} <span className="text-xs text-slate-400 font-normal">MW</span>
           </div>
-          <span className="text-[10px] text-rose-400 font-mono mt-0.5 inline-block">Over-forecast tendency</span>
+          <span className="text-[10px] text-rose-400 font-mono mt-0.5 inline-block">
+            {monthlyData.mean_bias_mw > 0 ? 'Over' : 'Under'}-forecast in {Math.round((100 * (monthlyData.mean_bias_mw > 0 ? monthlyData.over_forecast_count : monthlyData.under_forecast_count)) / monthlyData.total_periods_evaluated)}% of half-hours
+          </span>
         </div>
 
         {/* P90 Downside Risk */}
@@ -138,7 +152,7 @@ export const AccuracyLab: React.FC = () => {
           <div>
             <h3 className="font-bold text-base text-white">Diurnal Error Profile Across 48 Settlement Periods</h3>
             <p className="text-xs text-slate-400">
-              Shows how forecast error (MAE and Bias) varies across the day in January 2026. Notice higher uncertainty during evening peak (SPs 34-38).
+              How the error of the decision-time forecast varies by time of day, across all delivery days in the window.
             </p>
           </div>
           <span className="text-xs font-mono text-purple-400 bg-purple-950/60 border border-purple-800/50 px-2.5 py-1 rounded-full">
@@ -180,14 +194,51 @@ export const AccuracyLab: React.FC = () => {
         </div>
       </div>
 
+      {/* Error by Forecast Horizon */}
+      {horizonChartData.length > 0 && (
+        <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-xl">
+          <div className="mb-4">
+            <h3 className="font-bold text-base text-white">Forecast Error by Horizon</h3>
+            <p className="text-xs text-slate-400">
+              Error of the latest forecast published at least <em>h</em> hours before delivery. A D-1 {String(cutoffHour).padStart(2, '0')}:00
+              decision covers delivery {24 - cutoffHour}h to {48 - cutoffHour}h ahead, so this shows the accuracy given up by deciding a day early.
+            </p>
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={horizonChartData} margin={{ top: 10, right: 10, left: -10, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="horizon" stroke="#64748b" fontSize={11} fontFamily="monospace" tickLine={false} />
+                <YAxis
+                  stroke="#64748b"
+                  fontSize={11}
+                  fontFamily="monospace"
+                  tickLine={false}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`}
+                  domain={[0, 'auto']}
+                />
+                <Tooltip
+                  contentStyle={{ background: '#0f172a', border: '1px solid #334155', fontSize: 12, fontFamily: 'monospace' }}
+                  formatter={(value: number, name: string) => [`${value.toLocaleString()} MW`, name]}
+                />
+                <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: 15, fontSize: 12, fontFamily: 'monospace' }} />
+                <Line type="monotone" dataKey="mae" name="MAE (MW)" stroke="#a855f7" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="bias" name="Mean Bias (MW)" stroke="#f43f5e" strokeWidth={2} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="p90" name="P90 |Error| (MW)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* Daily Summary Table */}
       <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800/80 shadow-xl">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-cyan-400" />
-            <h3 className="font-bold text-sm text-white">January 2026 Daily Performance Log (31 Days)</h3>
+            <h3 className="font-bold text-sm text-white">Daily Log: Delivery 2 Jan to 1 Feb ({monthlyData.daily_summary.length} Days)</h3>
           </div>
-          <span className="text-xs font-mono text-slate-400">Locked at D-1 11:00 UTC</span>
+          <span className="text-xs font-mono text-slate-400">As of D-1 {String(cutoffHour).padStart(2, '0')}:00 UTC</span>
         </div>
 
         <div className="max-h-72 overflow-y-auto border border-slate-800 rounded-xl">

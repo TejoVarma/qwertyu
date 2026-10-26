@@ -24,6 +24,8 @@ describe('ProcurementTab component', () => {
     const mockProcurement: ProcurementAdvisorResponse = {
       delivery_date: '2026-01-15',
       decision_cutoff_used: '2026-01-14T11:00:00Z',
+      buffer_history_start: '2026-01-01',
+      buffer_history_end: '2026-01-13',
       peak_consumer_demand_mw: 38000.0,
       risk_tolerance_coefficient: 1.0,
       risk_tolerance_label: 'P90 Standard Risk',

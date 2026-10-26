@@ -80,7 +80,7 @@ export const SettlementChart: React.FC = () => {
         </div>
 
         <div className="pt-1.5 border-t border-slate-800/60 flex items-center justify-between text-[10px] text-slate-400">
-          <span>Issued by ESO:</span>
+          <span>Forecast published:</span>
           <span className="text-slate-300">{formattedPub}</span>
         </div>
       </div>
@@ -103,7 +103,7 @@ export const SettlementChart: React.FC = () => {
           </div>
           <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline" />
-            <span>Strict As-Of Snapshot: Forecast locked at <strong>{cutoffHour}:00 UTC on D-1</strong> (Zero look-ahead bias).</span>
+            <span>Point-in-time view: latest forecast published by <strong>{String(cutoffHour).padStart(2, '0')}:00 UTC on D-1</strong>.</span>
           </p>
         </div>
 
@@ -215,7 +215,7 @@ export const SettlementChart: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-cyan-400 rounded-full" />
-            <span>Forecast locked at D-1 11:00 UTC</span>
+            <span>Forecast as of D-1 {String(cutoffHour).padStart(2, '0')}:00 UTC</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-emerald-400 rounded-full" />

@@ -5,7 +5,12 @@ import {
   MonthlyAccuracyMetrics,
   DailySummaryItem,
   ProcurementAdvisorResponse,
+  HorizonAnalysisResponse,
 } from '../types';
+
+// Delivery days whose day-ahead purchase decision was taken in January 2026
+export const EVALUATION_START = '2026-01-02';
+export const EVALUATION_END = '2026-02-01';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -34,8 +39,8 @@ export const apiService = {
   },
 
   async getMonthlyEvaluation(
-    startDate: string = '2026-01-01',
-    endDate: string = '2026-01-31',
+    startDate: string = EVALUATION_START,
+    endDate: string = EVALUATION_END,
     cutoffHour: number = 11
   ): Promise<MonthlyAccuracyMetrics> {
     const { data } = await client.get<MonthlyAccuracyMetrics>('/evaluation/monthly', {
@@ -49,8 +54,8 @@ export const apiService = {
   },
 
   async getDailyLog(
-    startDate: string = '2026-01-01',
-    endDate: string = '2026-01-31',
+    startDate: string = EVALUATION_START,
+    endDate: string = EVALUATION_END,
     cutoffHour: number = 11
   ): Promise<DailySummaryItem[]> {
     const { data } = await client.get<DailySummaryItem[]>('/evaluation/daily-log', {
@@ -58,6 +63,19 @@ export const apiService = {
         start_date: startDate,
         end_date: endDate,
         cutoff_hour: cutoffHour,
+      },
+    });
+    return data;
+  },
+
+  async getHorizonAnalysis(
+    startDate: string = EVALUATION_START,
+    endDate: string = EVALUATION_END
+  ): Promise<HorizonAnalysisResponse> {
+    const { data } = await client.get<HorizonAnalysisResponse>('/evaluation/horizon', {
+      params: {
+        start_date: startDate,
+        end_date: endDate,
       },
     });
     return data;

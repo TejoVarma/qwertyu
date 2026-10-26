@@ -3,7 +3,7 @@ import { Wind, Activity, TrendingUp, Flame, AlertTriangle } from 'lucide-react';
 import { useTraderStore } from '../store/useTraderStore';
 
 export const KpiCards: React.FC = () => {
-  const { decisionData, procurementData, isLoading } = useTraderStore();
+  const { decisionData, procurementData, isLoading, cutoffHour } = useTraderStore();
 
   if (isLoading || !decisionData) {
     return (
@@ -34,7 +34,7 @@ export const KpiCards: React.FC = () => {
         </div>
         <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
           <span className="text-cyan-400 font-mono font-medium">48 SPs</span>
-          <span>• Locked at 11:00 UTC</span>
+          <span>• As of {String(cutoffHour).padStart(2, '0')}:00 UTC D-1</span>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent" />
       </div>
@@ -71,7 +71,7 @@ export const KpiCards: React.FC = () => {
         </div>
         <div className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
           <span className="font-mono text-purple-300">RMSE: {decisionData.day_rmse_mw} MW</span>
-          <span>• nMAE: {decisionData.normalized_mae_pct}%</span>
+          <span>• {decisionData.normalized_mae_pct}% of mean</span>
         </div>
         <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent" />
       </div>

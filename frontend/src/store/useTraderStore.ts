@@ -4,6 +4,7 @@ import {
   DayAheadDecisionResponse,
   MonthlyAccuracyMetrics,
   ProcurementAdvisorResponse,
+  HorizonAnalysisResponse,
   HealthStatus,
 } from '../types';
 
@@ -21,6 +22,7 @@ interface TraderStore {
   decisionData: DayAheadDecisionResponse | null;
   monthlyData: MonthlyAccuracyMetrics | null;
   procurementData: ProcurementAdvisorResponse | null;
+  horizonData: HorizonAnalysisResponse | null;
   health: HealthStatus | null;
 
   // UI State
@@ -39,6 +41,7 @@ interface TraderStore {
   fetchDecision: () => Promise<void>;
   fetchMonthly: () => Promise<void>;
   fetchProcurement: () => Promise<void>;
+  fetchHorizon: () => Promise<void>;
   loadAll: () => Promise<void>;
 }
 
@@ -52,6 +55,7 @@ export const useTraderStore = create<TraderStore>((set, get) => ({
   decisionData: null,
   monthlyData: null,
   procurementData: null,
+  horizonData: null,
   health: null,
 
   isLoading: false,
@@ -105,7 +109,7 @@ export const useTraderStore = create<TraderStore>((set, get) => ({
   fetchMonthly: async () => {
     const { cutoffHour } = get();
     try {
-      const monthlyData = await apiService.getMonthlyEvaluation('2026-01-01', '2026-01-31', cutoffHour);
+      const monthlyData = await apiService.getMonthlyEvaluation(undefined, undefined, cutoffHour);
       set({ monthlyData });
     } catch (err: any) {
       console.error('Failed to fetch monthly data:', err);
@@ -127,6 +131,15 @@ export const useTraderStore = create<TraderStore>((set, get) => ({
     }
   },
 
+  fetchHorizon: async () => {
+    try {
+      const horizonData = await apiService.getHorizonAnalysis();
+      set({ horizonData });
+    } catch (err: any) {
+      console.error('Failed to fetch horizon analysis:', err);
+    }
+  },
+
   loadAll: async () => {
     set({ isLoading: true, error: null });
     await Promise.all([
@@ -134,6 +147,7 @@ export const useTraderStore = create<TraderStore>((set, get) => ({
       get().fetchDecision(),
       get().fetchMonthly(),
       get().fetchProcurement(),
+      get().fetchHorizon(),
     ]);
     set({ isLoading: false });
   },

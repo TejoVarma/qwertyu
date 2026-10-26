@@ -31,8 +31,8 @@ describe('Navbar component', () => {
   it('renders Gate Closure timestamp and cutoff selector', () => {
     render(<Navbar />);
 
-    expect(screen.getByText(/Gate Closure/)).toBeInTheDocument();
-    expect(screen.getByDisplayValue('11:00 UTC (Official Gate)')).toBeInTheDocument();
+    expect(screen.getByText(/Decision Cutoff/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('11:00 UTC (Default)')).toBeInTheDocument();
   });
 
   it('allows clicking between trader navigation tabs', () => {
